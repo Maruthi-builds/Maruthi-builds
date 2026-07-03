@@ -33,4 +33,4 @@ Python • n8n • OpenAI • Claude • REST APIs • Google Workspace
 ## Connect
 - LinkedIn:  www.linkedin.com/in/maruthi-pitta
 - Portfolio: Coming Soon
-- Email: marruthipitta49@gmail.com
+- Email: maruthipitta49@gmail.com
