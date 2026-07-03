@@ -1,16 +1,36 @@
-## Hi there 👋
+# Hi, I'm Maruthi 👋
 
-<!--
-**Maruthi-builds/Maruthi-builds** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
+# Building AI Employees for Modern Businesses
 
-Here are some ideas to get you started:
+AI Systems Builder focused on AI Agents, Workflow Automation, and future SaaS products.
 
-- 🔭 I’m currently working on ...
-- 🌱 I’m currently learning ...
-- 👯 I’m looking to collaborate on ...
-- 🤔 I’m looking for help with ...
-- 💬 Ask me about ...
-- 📫 How to reach me: ...
-- 😄 Pronouns: ...
-- ⚡ Fun fact: ...
--->
+## Current Focus
+- AI HR Automation
+- AI Receptionist
+- AI Personal Assistant
+- AI Email & Calendar Agents
+- Python, DSA & System Design
+
+## Mission
+I build intelligent AI systems that automate business operations and help companies scale.
+
+## Tech
+Python • n8n • OpenAI • Claude • REST APIs • Google Workspace
+
+## Featured Projects
+- AI HR Recruiter
+- AI Receptionist SaaS
+- AI Personal Assistant
+- AI Email Agent
+- AI Calendar Agent
+
+## Roadmap
+- AI Real Estate Agent
+- AI Sales Agent
+- AI Customer Support Agent
+- AI SaaS Products
+
+## Connect
+- LinkedIn: add link
+- Portfolio: Coming Soon
+- Email: add email
