@@ -1,1 +1,3567 @@
-
+{
+  "name": "HR Team Hiring WF",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Software Engineer Application",
+        "formDescription": "Apply for the Software Engineer position. Fields marked * are required.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "full_name",
+              "placeholder": "Your full name",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "email",
+              "fieldType": "email",
+              "placeholder": "you@example.com",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "phone",
+              "fieldType": "number",
+              "placeholder": "+1 (555) 000-0000",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "linkedin_url",
+              "placeholder": "https://linkedin.com/in/yourname"
+            },
+            {
+              "fieldLabel": "portfolio_url",
+              "placeholder": "https://yourportfolio.com"
+            },
+            {
+              "fieldLabel": "resume",
+              "fieldType": "file",
+              "acceptFileTypes": ".pdf",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        -4032,
+        -336
+      ],
+      "id": "d5d592cb-074c-4e2c-b7c0-fc14b23509e2",
+      "name": "01 | Candidate Application Form",
+      "webhookId": "00ac312c-3a34-4728-9905-a2dec0734aaf"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const raw = (item.json.email || '').toLowerCase();\n  const safeEmail = raw.replace(/[^a-z0-9]/g, '-').substring(0, 30);\n  const ts = Date.now();\n  const candidateId = `CAND-${ts}-${safeEmail}`;\n\n  return {\n    json: {\n      full_name: item.json.full_name || '',\n      email: item.json.email || '',\n      phone: item.json.phone || '',\n      linkedin_url: item.json.linkedin_url || '',\n      portfolio_url: item.json.portfolio_url || '',\n      candidate_id: candidateId,\n      created_at: new Date().toISOString(),\n      stage: 'Applied',\n      workflow_version: 'v3'\n    },\n    binary: item.binary\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3808,
+        -336
+      ],
+      "id": "7cc4a52e-3221-4284-8491-d08505125f67",
+      "name": "02 | Generate Candidate ID"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const binaryData = item.binary || {};\n  const keys = Object.keys(binaryData);\n\n  if (keys.length === 0) {\n    throw new Error(`No file uploaded for candidate: ${item.json.email || 'unknown'}`);\n  }\n\n  const firstKey = keys[0];\n  const fileMeta = binaryData[firstKey];\n\n  const mimeType = fileMeta.mimeType || '';\n  if (mimeType && !mimeType.includes('pdf')) {\n    throw new Error(`Invalid file type: ${mimeType}. Only PDF is accepted.`);\n  }\n\n  return {\n    json: item.json,\n    binary: {\n      resume_file: fileMeta\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3584,
+        -336
+      ],
+      "id": "d2f245f3-7fac-404d-95ef-04edcfb6e551",
+      "name": "03 | Normalize Binary Name"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-resume-exists",
+              "leftValue": "={{ Object.keys($binary || {}).includes('resume_file') ? 'yes' : 'no' }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -3360,
+        -336
+      ],
+      "id": "8d80c317-4b75-460e-bd62-d4ab25338900",
+      "name": "04 | Validate Resume Upload"
+    },
+    {
+      "parameters": {
+        "inputDataFieldName": "resume_file",
+        "name": "={{ $json.candidate_id }}-resume.pdf",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "root",
+          "mode": "list",
+          "cachedResultName": "/ (Root folder)",
+          "cachedResultUrl": "https://drive.google.com/drive"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -3136,
+        -432
+      ],
+      "id": "d3419be5-b0e8-49a0-a829-b1f8fabaabdf",
+      "name": "05 | Upload Resume to Drive",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "4EOJIRN7XQ6WFWYx",
+          "name": "Google Drive OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const driveResponse = items[0].json;\nconst candidateData = $('02 | Generate Candidate ID').first().json;\n\nif (!driveResponse.id) {\n  throw new Error('Google Drive upload did not return a file ID.');\n}\n\nreturn [{\n  json: {\n    ...candidateData,\n    drive_resume_link: driveResponse.webViewLink || '',\n    drive_file_id: driveResponse.id || '',\n    drive_file_name: driveResponse.name || ''\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2912,
+        -432
+      ],
+      "id": "a5f90116-a1c8-426a-afb0-0f62e7b849f1",
+      "name": "06 | Merge Candidate and Drive Data"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE",
+          "mode": "list",
+          "cachedResultName": "Hiring",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "email": "={{ $('01 | Candidate Application Form').item.json.email }}",
+            "full_name": "={{ $('01 | Candidate Application Form').item.json.full_name }}",
+            "phone": "={{ $('01 | Candidate Application Form').item.json.phone }}",
+            "linkedin_url": "={{ $('01 | Candidate Application Form').item.json.linkedin_url }}",
+            "portfolio_url": "={{ $('01 | Candidate Application Form').item.json.portfolio_url }}",
+            "candidate_id": "={{ $('02 | Generate Candidate ID').item.json.candidate_id }}",
+            "drive_resume_link": "={{ $json.drive_resume_link }}",
+            "drive_file_id": "={{ $('05 | Upload Resume to Drive').item.json.id }}",
+            "created_at": "={{ $json.created_at }}",
+            "stage": "={{ $json.stage }}"
+          },
+          "matchingColumns": [
+            "email"
+          ],
+          "schema": [
+            {
+              "id": "candidate_id",
+              "displayName": "candidate_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "full_name",
+              "displayName": "full_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "linkedin_url",
+              "displayName": "linkedin_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "portfolio_url",
+              "displayName": "portfolio_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "drive_resume_link",
+              "displayName": "drive_resume_link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "drive_file_id",
+              "displayName": "drive_file_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "stage",
+              "displayName": "stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "strengths",
+              "displayName": "strengths",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weaknesses",
+              "displayName": "weaknesses",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "recommended_stage",
+              "displayName": "recommended_stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ai_parsing_failed",
+              "displayName": "ai_parsing_failed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scored_at",
+              "displayName": "scored_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "workflow_version",
+              "displayName": "workflow_version",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "questionnaire_responses",
+              "displayName": "questionnaire_responses",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "phone_interview_notes",
+              "displayName": "phone_interview_notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "phone_screening_result",
+              "displayName": "phone_screening_result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "recruiter_notes",
+              "displayName": "recruiter_notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -2688,
+        -432
+      ],
+      "id": "6a2fcdae-f3ff-4834-a48b-c84e93663c8f",
+      "name": "07 | Create ATS Record",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "RIawvczPmPaW8l8i",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.drive_file_id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -2464,
+        -432
+      ],
+      "id": "461bb57e-0453-4cbd-a5fc-6e2cf563642f",
+      "name": "08 | Download Resume from Drive",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "4EOJIRN7XQ6WFWYx",
+          "name": "Google Drive OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const binaryData = item.binary || {};\n  const keys = Object.keys(binaryData);\n\n  if (keys.length === 0) {\n    const candidateId = $('06 | Merge Candidate and Drive Data').first().json.candidate_id || 'unknown';\n    throw new Error(`Resume download returned no binary data for candidate: ${candidateId}`);\n  }\n\n  const firstKey = keys[0];\n\n  return {\n    json: item.json,\n    binary: {\n      resume_pdf: binaryData[firstKey]\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2240,
+        -432
+      ],
+      "id": "f7b6afb4-9379-4fcd-854a-553f755fda3a",
+      "name": "09 | Normalize Download Binary"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "resume_pdf",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -2016,
+        -432
+      ],
+      "id": "1e2ac9de-b996-4dcf-8570-2261fb3af5c5",
+      "name": "10 | Extract Resume Text"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: $json\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1440,
+        -432
+      ],
+      "id": "e8d47ae5-c90b-4485-bc3f-c5b35b2c29a4",
+      "name": "12 | Parse AI Response and Merge"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-score-gate",
+              "leftValue": "={{$json.output[0].content[0].text.score }}",
+              "rightValue": 70,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1216,
+        -432
+      ],
+      "id": "2c57fb3f-9ea7-490a-986a-2beac342c481",
+      "name": "13 | Score Decision Gate"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('01 | Candidate Application Form').item.json.email }}",
+        "subject": "=Your application is progressing - Interview Invitation |",
+        "message": "=<p>Dear {{ $('01 | Candidate Application Form').item.json.full_name }},</p>{{ $('02 | Generate Candidate ID').item.json.candidate_id }}\n\n<p>We are delighted to inform you that after reviewing your application for the <strong>Software Engineer</strong> position, you have been <strong>shortlisted for an interview</strong>.</p>\n\n<p><strong>Your Application Assessment:</strong><br>\nScore: {{ $json.output[0].content[0].text.score }}/100<br>\nSummary: {{ $json.output[0].content[0].text.summary }}</p>\n\n<p><strong>Key Strengths We Identified:</strong><br>\n{{ $json.output[0].content[0].text.strengths }}</p>\n\n<p>A member of our HR team will reach out within <strong>24 hours</strong> to schedule your interview at a time convenient for you.</p>\n\n<p>In the meantime, if you have any questions please reply to this email.</p>\n\n<p>Best regards,<br>\n<strong>HR Team</strong></p>\n\n<p style=\"color:#999;font-size:12px;\">Reference ID: {{ $('02 | Generate Candidate ID').item.json.candidate_id }}</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -992,
+        -528
+      ],
+      "id": "f6073f12-4b30-41a7-aadb-5684d68c4f9c",
+      "name": "14a | Interview Invite Email",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "webhookId": "22682fc9-45a9-4061-9ea0-fd9e167e02fd",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "6dfAY7TLFQ6BmwZn",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('01 | Candidate Application Form').item.json.email }}",
+        "subject": "=Update on your Software Engineer application |{{ $('02 | Generate Candidate ID').item.json.candidate_id }}",
+        "message": "=<p>Dear {{ $('01 | Candidate Application Form').item.json.full_name }},</p>\n\n<p>Thank you for taking the time to apply for the <strong>Software Engineer</strong> position and for your interest in joining our team.</p>\n\n<p>After carefully reviewing your application, we have decided to move forward with other candidates whose experience more closely matches our current requirements at this time.</p>\n\n<p>We genuinely appreciate the effort you put into your application, and we encourage you to apply for future opportunities with us that align with your skills and experience.</p>\n\n<p>We wish you the very best in your job search and in your career.</p>\n\n<p>Kind regards,<br>\n<strong>HR Team</strong></p>\n\n<p style=\"color:#999;font-size:12px;\">Reference ID: {{ $('02 | Generate Candidate ID').item.json.candidate_id }}</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -992,
+        -336
+      ],
+      "id": "92ea6c39-8419-4ed1-99e9-2d63626b5b92",
+      "name": "14b | Rejection Email",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "webhookId": "f2671b99-62ad-4e54-b303-7ecb96b4abbb",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "6dfAY7TLFQ6BmwZn",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE",
+          "mode": "list",
+          "cachedResultName": "Hiring",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "email": "={{ $('01 | Candidate Application Form').item.json.email }}",
+            "candidate_id": "={{ $('02 | Generate Candidate ID').item.json.candidate_id }}",
+            "full_name": "={{ $('02 | Generate Candidate ID').item.json.full_name }}",
+            "phone": "={{ $('02 | Generate Candidate ID').item.json.phone }}",
+            "linkedin_url": "={{ $('02 | Generate Candidate ID').item.json.linkedin_url }}",
+            "portfolio_url": "={{ $('02 | Generate Candidate ID').item.json.portfolio_url }}",
+            "drive_file_id": "={{ $('06 | Merge Candidate and Drive Data').item.json.drive_file_id }}",
+            "drive_resume_link": "={{ $('06 | Merge Candidate and Drive Data').item.json.drive_resume_link }}",
+            "stage": "={{ $('07 | Create ATS Record').item.json.stage }}",
+            "score": "={{ $('13 | Score Decision Gate').item.json.output[0].content[0].text.score }}",
+            "summary": "={{ $('13 | Score Decision Gate').item.json.output[0].content[0].text.summary }}",
+            "strengths": "={{ $('13 | Score Decision Gate').item.json.output[0].content[0].text.strengths }}",
+            "weaknesses": "={{ $('13 | Score Decision Gate').item.json.output[0].content[0].text.weaknesses }}",
+            "recommended_stage": "={{ $('13 | Score Decision Gate').item.json.output[0].content[0].text.recommended_stage }}",
+            "created_at": "={{ $('01 | Candidate Application Form').item.json.submittedAt }}"
+          },
+          "matchingColumns": [
+            "email"
+          ],
+          "schema": [
+            {
+              "id": "candidate_id",
+              "displayName": "candidate_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "full_name",
+              "displayName": "full_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "linkedin_url",
+              "displayName": "linkedin_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "portfolio_url",
+              "displayName": "portfolio_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "drive_resume_link",
+              "displayName": "drive_resume_link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "drive_file_id",
+              "displayName": "drive_file_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "stage",
+              "displayName": "stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "strengths",
+              "displayName": "strengths",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "weaknesses",
+              "displayName": "weaknesses",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "recommended_stage",
+              "displayName": "recommended_stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ai_parsing_failed",
+              "displayName": "ai_parsing_failed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scored_at",
+              "displayName": "scored_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "workflow_version",
+              "displayName": "workflow_version",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "questionnaire_responses",
+              "displayName": "questionnaire_responses",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone_interview_notes",
+              "displayName": "phone_interview_notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone_screening_result",
+              "displayName": "phone_screening_result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "recruiter_notes",
+              "displayName": "recruiter_notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -768,
+        -528
+      ],
+      "id": "af6d88ed-5faf-4660-9267-9031f28359fc",
+      "name": "15a | Update ATS Shortlisted",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "RIawvczPmPaW8l8i",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE",
+          "mode": "list",
+          "cachedResultName": "Hiring",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "email": "={{ $('01 | Candidate Application Form').item.json.email }}",
+            "full_name": "={{ $('01 | Candidate Application Form').item.json.full_name }}",
+            "phone": "={{ $('01 | Candidate Application Form').item.json.phone }}",
+            "score": "={{ $('13 | Score Decision Gate').item.json.output[0].content[0].text.score }}",
+            "strengths": "={{ $('13 | Score Decision Gate').item.json.output[0].content[0].text.strengths }}",
+            "weaknesses": "={{ $('13 | Score Decision Gate').item.json.output[0].content[0].text.weaknesses }}",
+            "recommended_stage": "={{ $('13 | Score Decision Gate').item.json.output[0].content[0].text.recommended_stage }}",
+            "summary": "={{ $('13 | Score Decision Gate').item.json.output[0].content[0].text.summary }}"
+          },
+          "matchingColumns": [
+            "email"
+          ],
+          "schema": [
+            {
+              "id": "candidate_id",
+              "displayName": "candidate_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "full_name",
+              "displayName": "full_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "linkedin_url",
+              "displayName": "linkedin_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "portfolio_url",
+              "displayName": "portfolio_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "drive_resume_link",
+              "displayName": "drive_resume_link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "drive_file_id",
+              "displayName": "drive_file_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "stage",
+              "displayName": "stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "strengths",
+              "displayName": "strengths",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "weaknesses",
+              "displayName": "weaknesses",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "recommended_stage",
+              "displayName": "recommended_stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ai_parsing_failed",
+              "displayName": "ai_parsing_failed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scored_at",
+              "displayName": "scored_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "workflow_version",
+              "displayName": "workflow_version",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "questionnaire_responses",
+              "displayName": "questionnaire_responses",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone_interview_notes",
+              "displayName": "phone_interview_notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone_screening_result",
+              "displayName": "phone_screening_result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "recruiter_notes",
+              "displayName": "recruiter_notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -768,
+        -336
+      ],
+      "id": "1f8023c7-c572-4712-8d1c-4adb63d404e3",
+      "name": "15b | Update ATS Rejected",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "RIawvczPmPaW8l8i",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0B2QE63JMB",
+          "mode": "list",
+          "cachedResultName": "all-hr-recruit"
+        },
+        "text": "=*New Shortlisted Candidate* :tada:\n\n*Name:* {{ $json.full_name }}\n*Email:* {{ $json.email }}\n*Score:* {{ $json.score }}/100\n*Recommended Stage:* {{ $json.recommended_stage }}\n\n*Summary:*\n{{ $json.summary }}\n\n*Key Strengths:*\n{{ $json.strengths }}\n\n*Resume:* {{ $json.drive_resume_link }}\n*Candidate ID:* {{ $json.candidate_id }}\n*Applied at:* {{ $json.created_at }}",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        -544,
+        -528
+      ],
+      "id": "993c5e6d-9388-4fc6-a3d6-7586c93bdf24",
+      "name": "16a | HR Slack Alert",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "webhookId": "1174557f-cdb8-46df-9af8-d36c38e9b249",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "SWYmcF8KWRxK0OdN",
+          "name": "Slack OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE",
+          "mode": "list",
+          "cachedResultName": "Hiring",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "candidate_id": "={{ $json.candidate_id }}",
+            "full_name": "={{ $json.full_name }}",
+            "email": "={{ $json.email }}",
+            "score": "={{ $json.score }}",
+            "recommended_stage": "={{ $json.recommended_stage }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "candidate_id",
+              "displayName": "candidate_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "full_name",
+              "displayName": "full_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "linkedin_url",
+              "displayName": "linkedin_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "portfolio_url",
+              "displayName": "portfolio_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "drive_resume_link",
+              "displayName": "drive_resume_link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "drive_file_id",
+              "displayName": "drive_file_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "stage",
+              "displayName": "stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "strengths",
+              "displayName": "strengths",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weaknesses",
+              "displayName": "weaknesses",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "recommended_stage",
+              "displayName": "recommended_stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ai_parsing_failed",
+              "displayName": "ai_parsing_failed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scored_at",
+              "displayName": "scored_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "workflow_version",
+              "displayName": "workflow_version",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "questionnaire_responses",
+              "displayName": "questionnaire_responses",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "phone_interview_notes",
+              "displayName": "phone_interview_notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "phone_screening_result",
+              "displayName": "phone_screening_result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "recruiter_notes",
+              "displayName": "recruiter_notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -544,
+        -336
+      ],
+      "id": "43efe149-4343-4236-a5f2-868acd059ae4",
+      "name": "16b | Log Rejection",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "RIawvczPmPaW8l8i",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -4032,
+        -976
+      ],
+      "id": "c72ee1f7-8f74-4b13-a208-d166b72123a1",
+      "name": "E1 | Error Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE",
+          "mode": "list",
+          "cachedResultName": "Hiring",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "score": "=N/A"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "candidate_id",
+              "displayName": "candidate_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "full_name",
+              "displayName": "full_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "linkedin_url",
+              "displayName": "linkedin_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "portfolio_url",
+              "displayName": "portfolio_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "drive_resume_link",
+              "displayName": "drive_resume_link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "drive_file_id",
+              "displayName": "drive_file_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "stage",
+              "displayName": "stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "strengths",
+              "displayName": "strengths",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weaknesses",
+              "displayName": "weaknesses",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "recommended_stage",
+              "displayName": "recommended_stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ai_parsing_failed",
+              "displayName": "ai_parsing_failed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scored_at",
+              "displayName": "scored_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "workflow_version",
+              "displayName": "workflow_version",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "questionnaire_responses",
+              "displayName": "questionnaire_responses",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "phone_interview_notes",
+              "displayName": "phone_interview_notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "phone_screening_result",
+              "displayName": "phone_screening_result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "recruiter_notes",
+              "displayName": "recruiter_notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -4032,
+        -752
+      ],
+      "id": "dfe113ae-93ae-4bf2-9213-16cd01c85c7b",
+      "name": "E2 | Log Error to Sheets",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "RIawvczPmPaW8l8i",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "hr@yourcompany.com",
+        "subject": "=ALERT: HR Recruitment Workflow Error - Action Required",
+        "message": "=<p><strong>An error occurred in the HR Recruitment workflow.</strong></p>\n\n<p><strong>Error Message:</strong><br>\n{{ $json.execution.error.message || 'Unknown error' }}</p>\n\n<p><strong>Last Node Executed:</strong><br>\n{{ $json.execution.lastNodeExecuted || 'Unknown' }}</p>\n\n<p><strong>Execution ID:</strong><br>\n{{ $json.execution.id || 'N/A' }}</p>\n\n<p><strong>Execution URL:</strong><br>\n<a href=\"{{ $json.execution.url || '#' }}\">View Execution</a></p>\n\n<p><strong>Workflow:</strong> {{ $json.workflow.name || 'HR Recruitment AI System' }}</p>\n\n<p>Please check the Error Log sheet and the n8n execution log for full details.</p>\n\n<p>This is an automated alert from your n8n HR Recruitment system.</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -3808,
+        -752
+      ],
+      "id": "59c4570b-57be-4067-b84e-3997b1cf30e1",
+      "name": "E3 | Notify HR of Error",
+      "webhookId": "391434a2-dad8-42b8-9f83-0d283231ca89",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "6dfAY7TLFQ6BmwZn",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE",
+          "mode": "list",
+          "cachedResultName": "Hiring",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "candidate_id": "={{ $json.candidate_id || 'N/A' }}",
+            "full_name": "={{ $json.full_name || 'N/A' }}",
+            "email": "={{ $json.email || 'N/A' }}",
+            "score": "=N/A",
+            "phone": "={{ $('03 | Normalize Binary Name').item.json.phone }}",
+            "portfolio_url": "={{ $('03 | Normalize Binary Name').item.json.portfolio_url }}",
+            "linkedin_url": "={{ $('03 | Normalize Binary Name').item.json.linkedin_url }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "candidate_id",
+              "displayName": "candidate_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "full_name",
+              "displayName": "full_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "linkedin_url",
+              "displayName": "linkedin_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "portfolio_url",
+              "displayName": "portfolio_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "drive_resume_link",
+              "displayName": "drive_resume_link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "drive_file_id",
+              "displayName": "drive_file_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "stage",
+              "displayName": "stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "strengths",
+              "displayName": "strengths",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weaknesses",
+              "displayName": "weaknesses",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "recommended_stage",
+              "displayName": "recommended_stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ai_parsing_failed",
+              "displayName": "ai_parsing_failed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scored_at",
+              "displayName": "scored_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "workflow_version",
+              "displayName": "workflow_version",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "questionnaire_responses",
+              "displayName": "questionnaire_responses",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "phone_interview_notes",
+              "displayName": "phone_interview_notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "phone_screening_result",
+              "displayName": "phone_screening_result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "recruiter_notes",
+              "displayName": "recruiter_notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -3136,
+        -240
+      ],
+      "id": "ecc85096-7a61-42cc-84e6-be37d8f69448",
+      "name": "E4 | Log Missing Resume",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "RIawvczPmPaW8l8i",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "You are an expert technical recruiter specialising in Software Engineering roles.\n\nAnalyse the resume text and return ONLY a raw JSON object with these exact keys:\n\n{\n\"score\": 0,\n\"summary\": \"\",\n\"strengths\": [],\n\"weaknesses\": [],\n\"recommended_stage\": \"\"\n}\n\nRules:\n\n* score must be integer 0-100\n* summary max 100 words\n* strengths must contain 3-5 items\n* weaknesses must contain 1-3 items\n* recommended_stage must be one of:\n  \"Phone Screen\",\n  \"Technical Interview\",\n  \"Final Interview\",\n  \"Offer\",\n  \"Reject\",\n  \"Manual Review\"\n\nDo not wrap JSON in markdown.\nDo not explain anything.\nReturn ONLY valid JSON.\n"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "textFormat": {
+            "textOptions": {
+              "type": "json_object"
+            }
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        -1792,
+        -432
+      ],
+      "id": "98efbb54-51be-48f0-b169-b50d3a2e2148",
+      "name": "Message a model",
+      "credentials": {
+        "openAiApi": {
+          "id": "NSbPbXLuzJW694kK",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "formTitle": "Technical Questionnaire - Software Engineer",
+        "formDescription": "Please answer all questions carefully. Each question carries 20 marks (Total: 100 marks). Your responses will be evaluated by our AI technical evaluator.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Full Name",
+              "placeholder": "Enter your full name exactly as submitted in application",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Email",
+              "fieldType": "email",
+              "placeholder": "Enter your email address (same as application)",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Q1: Explain the difference between REST and GraphQL APIs. When would you choose one over the other? (20 marks)",
+              "fieldType": "textarea",
+              "placeholder": "Provide a detailed technical explanation with real-world use cases...",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Q2: Describe how you would optimize a slow database query. What tools and techniques would you use? (20 marks)",
+              "fieldType": "textarea",
+              "placeholder": "Explain your approach, tools, indexing strategies, and optimization techniques...",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Q3: How would you design a scalable microservices architecture for an e-commerce platform? (20 marks)",
+              "fieldType": "textarea",
+              "placeholder": "Describe services, communication patterns, data management, and scalability strategies...",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Q4: Explain your approach to debugging a production issue where users report intermittent failures. (20 marks)",
+              "fieldType": "textarea",
+              "placeholder": "Detail your debugging methodology, tools, logging strategies, and resolution approach...",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Q5: What is your experience with CI/CD pipelines? Describe a pipeline you have built or worked with. (20 marks)",
+              "fieldType": "textarea",
+              "placeholder": "Explain the pipeline stages, tools used, deployment strategies, and automation practices...",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b3499dea-f186-4d60-a95f-1fec7432d7ce",
+      "name": "19 | Questionnaire Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        -4032,
+        80
+      ],
+      "webhookId": "612cd4a6-30be-4052-af5a-ac6e4797b982"
+    },
+    {
+      "parameters": {
+        "jsCode": "const formData = $('19 | Questionnaire Form').first().json;\nconst candidateData = $('21 | Lookup Candidate Data').first().json;\n\nconst q1 = formData['Q1: Explain the difference between REST and GraphQL APIs. When would you choose one over the other? (20 marks)'] || '';\nconst q2 = formData['Q2: Describe how you would optimize a slow database query. What tools and techniques would you use? (20 marks)'] || '';\nconst q3 = formData['Q3: How would you design a scalable microservices architecture for an e-commerce platform? (20 marks)'] || '';\nconst q4 = formData['Q4: Explain your approach to debugging a production issue where users report intermittent failures. (20 marks)'] || '';\nconst q5 = formData['Q5: What is your experience with CI/CD pipelines? Describe a pipeline you have built or worked with. (20 marks)'] || '';\n\nconst responses = `\nQ1 (REST vs GraphQL - 20 marks):\n${q1}\n\nQ2 (Database Query Optimization - 20 marks):\n${q2}\n\nQ3 (Microservices Architecture Design - 20 marks):\n${q3}\n\nQ4 (Production Debugging Approach - 20 marks):\n${q4}\n\nQ5 (CI/CD Pipeline Experience - 20 marks):\n${q5}`;\n\nreturn [{\n  json: {\n    candidate_id: candidateData.candidate_id || 'N/A',\n    full_name: formData['Full Name'],\n    email: formData.Email,\n    questionnaire_responses: responses,\n    resume_score: candidateData.score || 0,\n    resume_summary: candidateData.summary || ''\n  }\n}];"
+      },
+      "id": "0371aad9-ede7-4e59-b2ed-db162ac4cb4d",
+      "name": "22 | Build Evaluation Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3584,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const aiOutput = $json.output?.[0]?.content?.[0]?.text || {};\nconst promptData = $('22 | Build Evaluation Prompt').first().json;\n\nreturn [{\n  json: {\n    candidate_id: promptData.candidate_id,\n    full_name: promptData.full_name,\n    email: promptData.email,\n\n    questionnaire_responses: promptData.questionnaire_responses,\n\n    questionnaire_score: aiOutput.questionnaire_score || 0,\n    q1_score: aiOutput.q1_score || 0,\n    q2_score: aiOutput.q2_score || 0,\n    q3_score: aiOutput.q3_score || 0,\n    q4_score: aiOutput.q4_score || 0,\n    q5_score: aiOutput.q5_score || 0,\n    phone_interview_notes: aiOutput.phone_interview_notes || '',\n    phone_screening_result: aiOutput.phone_screening_result || '',\n    recruiter_notes: aiOutput.recruiter_notes || '',\n    recommended_stage: aiOutput.recommended_stage || 'Manual Review',\n\n    updated_at: new Date().toISOString(),\n    scored_at: new Date().toISOString(),\n    workflow_version: 'v8'\n  }\n}];"
+      },
+      "id": "8b3c28fd-4575-4a0c-a7b5-a5a03b2d7464",
+      "name": "24 | Parse Evaluation Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3008,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE",
+          "mode": "list",
+          "cachedResultName": "Hiring",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "email": "={{ $json.email }}",
+            "questionnaire_responses": "={{ $json.questionnaire_responses }}",
+            "phone_interview_notes": "={{ $json.phone_interview_notes }}",
+            "phone_screening_result": "={{ $json.phone_screening_result }}",
+            "recruiter_notes": "={{ $json.recruiter_notes }}",
+            "recommended_stage": "={{ $json.recommended_stage }}",
+            "updated_at": "={{ $json.updated_at }}",
+            "scored_at": "={{ $json.scored_at }}",
+            "workflow_version": "={{ $json.workflow_version }}"
+          },
+          "matchingColumns": [
+            "email"
+          ],
+          "schema": [
+            {
+              "id": "candidate_id",
+              "displayName": "candidate_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "full_name",
+              "displayName": "full_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "linkedin_url",
+              "displayName": "linkedin_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "portfolio_url",
+              "displayName": "portfolio_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "drive_resume_link",
+              "displayName": "drive_resume_link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "drive_file_id",
+              "displayName": "drive_file_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "stage",
+              "displayName": "stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "strengths",
+              "displayName": "strengths",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weaknesses",
+              "displayName": "weaknesses",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "recommended_stage",
+              "displayName": "recommended_stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ai_parsing_failed",
+              "displayName": "ai_parsing_failed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scored_at",
+              "displayName": "scored_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "workflow_version",
+              "displayName": "workflow_version",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "questionnaire_responses",
+              "displayName": "questionnaire_responses",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone_interview_notes",
+              "displayName": "phone_interview_notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone_screening_result",
+              "displayName": "phone_screening_result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "recruiter_notes",
+              "displayName": "recruiter_notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "24c5faec-0865-4944-98b6-651f5b676771",
+      "name": "25 | Update ATS",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -2784,
+        80
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "RIawvczPmPaW8l8i",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "score-check",
+              "leftValue": "={{ $(\"24 | Parse Evaluation Result\").item.json.questionnaire_score }}",
+              "rightValue": 75,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "id": "38ba33f2-db22-4a13-996f-1cc0e4b8855f",
+      "name": "26 | Questionnaire Decision",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2560,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=You are an expert senior technical interviewer evaluating a Software Engineer candidate.\n\nEVALUATION CRITERIA (Each question worth 20 marks, Total: 100 marks):\n\nQ1 (REST vs GraphQL - 20 marks):\n- Understanding of both architectures (5 marks)\n- Clear comparison of strengths/weaknesses (5 marks)\n- Real-world use case examples (5 marks)\n- Decision-making rationale (5 marks)\n\nQ2 (Database Query Optimization - 20 marks):\n- Knowledge of profiling tools (5 marks)\n- Indexing strategies (5 marks)\n- Query rewriting techniques (5 marks)\n- Performance monitoring approach (5 marks)\n\nQ3 (Microservices Architecture - 20 marks):\n- Service decomposition strategy (5 marks)\n- Inter-service communication (5 marks)\n- Data management patterns (5 marks)\n- Scalability and resilience design (5 marks)\n\nQ4 (Production Debugging - 20 marks):\n- Systematic debugging methodology (5 marks)\n- Logging and monitoring tools (5 marks)\n- Root cause analysis approach (5 marks)\n- Communication and resolution strategy (5 marks)\n\nQ5 (CI/CD Pipeline - 20 marks):\n- Pipeline stages understanding (5 marks)\n- Tool knowledge (5 marks)\n- Automation practices (5 marks)\n- Real project experience (5 marks)\n\nSCORING GUIDELINES:\n- 18-20: Exceptional answer with deep technical insight\n- 15-17: Strong answer with good technical understanding\n- 12-14: Adequate answer with basic knowledge\n- 8-11: Weak answer with limited understanding\n- 0-7: Poor answer or missing key concepts\n\nPassing Score: 75/100 (Average 15/20 per question)\n\nReturn STRICT VALID JSON ONLY:\n\n{\n  \"questionnaire_score\": 0,\n  \"q1_score\": 0,\n  \"q2_score\": 0,\n  \"q3_score\": 0,\n  \"q4_score\": 0,\n  \"q5_score\": 0,\n  \"phone_interview_notes\": \"Detailed breakdown of strengths and weaknesses per question\",\n  \"phone_screening_result\": \"Pass/Fail with justification\",\n  \"recruiter_notes\": \"Overall assessment and hiring recommendation\",\n  \"recommended_stage\": \"\"\n}\n\nrecommended_stage must be one of:\n- Reject\n- Phone Screen\n- Technical Interview\n- Final Interview\n\nCandidate Details:\n\nCandidate ID: {{ $json.candidate_id }}\nFull Name: {{ $json.full_name }}\nResume Score: {{ $json.resume_score }}/100\n\nCandidate Answers:\n\n{{ $json.questionnaire_responses }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "textFormat": {
+            "textOptions": {
+              "type": "json_object"
+            }
+          }
+        }
+      },
+      "id": "1923c944-01b4-453c-a03b-a86d23d17c91",
+      "name": "23 | OpenAI Evaluation",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        -3360,
+        80
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "NSbPbXLuzJW694kK",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE",
+          "mode": "list",
+          "cachedResultName": "Hiring",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "email": "={{ $json.email }}",
+            "stage": "=Questionnaire Passed",
+            "updated_at": "={{ $json.updated_at }}"
+          },
+          "matchingColumns": [
+            "email"
+          ],
+          "schema": [
+            {
+              "id": "candidate_id",
+              "displayName": "candidate_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "full_name",
+              "displayName": "full_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "linkedin_url",
+              "displayName": "linkedin_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "portfolio_url",
+              "displayName": "portfolio_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "drive_resume_link",
+              "displayName": "drive_resume_link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "drive_file_id",
+              "displayName": "drive_file_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "stage",
+              "displayName": "stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "strengths",
+              "displayName": "strengths",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weaknesses",
+              "displayName": "weaknesses",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "recommended_stage",
+              "displayName": "recommended_stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ai_parsing_failed",
+              "displayName": "ai_parsing_failed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scored_at",
+              "displayName": "scored_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "workflow_version",
+              "displayName": "workflow_version",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "questionnaire_responses",
+              "displayName": "questionnaire_responses",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "phone_interview_notes",
+              "displayName": "phone_interview_notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "phone_screening_result",
+              "displayName": "phone_screening_result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "recruiter_notes",
+              "displayName": "recruiter_notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "22975390-1ab5-4fdc-90e1-0377599f3e17",
+      "name": "27 | Update ATS Passed",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -2336,
+        -16
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "RIawvczPmPaW8l8i",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0B2QE63JMB",
+          "mode": "list",
+          "cachedResultName": "all-hr-recruit"
+        },
+        "text": "=*Candidate Passed Questionnaire* :white_check_mark:\n\n*Candidate ID:* {{ $(\"24 | Parse Evaluation Result\").item.json.candidate_id }}\n*Name:* {{ $(\"24 | Parse Evaluation Result\").item.json.full_name }}\n*Email:* {{ $(\"24 | Parse Evaluation Result\").item.json.email }}\n*Total Score:* {{ $(\"24 | Parse Evaluation Result\").item.json.questionnaire_score }}/100\n\n*Question Breakdown:*\n• Q1 (REST vs GraphQL): {{ $(\"24 | Parse Evaluation Result\").item.json.q1_score }}/20\n• Q2 (DB Optimization): {{ $(\"24 | Parse Evaluation Result\").item.json.q2_score }}/20\n• Q3 (Microservices): {{ $(\"24 | Parse Evaluation Result\").item.json.q3_score }}/20\n• Q4 (Debugging): {{ $(\"24 | Parse Evaluation Result\").item.json.q4_score }}/20\n• Q5 (CI/CD): {{ $(\"24 | Parse Evaluation Result\").item.json.q5_score }}/20\n\n*Recommended Stage:* {{ $(\"24 | Parse Evaluation Result\").item.json.recommended_stage }}\n\n*Recruiter Notes:*\n{{ $(\"24 | Parse Evaluation Result\").item.json.recruiter_notes }}",
+        "otherOptions": {}
+      },
+      "id": "34e12c20-3f3b-49e4-a554-0d3cbc04c061",
+      "name": "28 | Slack Pass Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        -2112,
+        -16
+      ],
+      "webhookId": "40823195-9790-4fb0-89a2-40c63d876303",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "SWYmcF8KWRxK0OdN",
+          "name": "Slack OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $(\"24 | Parse Evaluation Result\").item.json.email }}",
+        "subject": "Congratulations - Questionnaire Passed!",
+        "message": "=<p>Hi {{ $(\"24 | Parse Evaluation Result\").item.json.full_name }},</p>\n\n<p><strong>Congratulations!</strong> You have successfully passed the technical questionnaire stage.</p>\n\n<p><strong>Your Results:</strong></p>\n<ul>\n<li>Total Score: <strong>{{ $(\"24 | Parse Evaluation Result\").item.json.questionnaire_score }}/100</strong></li>\n<li>Q1 (REST vs GraphQL): {{ $(\"24 | Parse Evaluation Result\").item.json.q1_score }}/20</li>\n<li>Q2 (Database Optimization): {{ $(\"24 | Parse Evaluation Result\").item.json.q2_score }}/20</li>\n<li>Q3 (Microservices Architecture): {{ $(\"24 | Parse Evaluation Result\").item.json.q3_score }}/20</li>\n<li>Q4 (Production Debugging): {{ $(\"24 | Parse Evaluation Result\").item.json.q4_score }}/20</li>\n<li>Q5 (CI/CD Pipeline): {{ $(\"24 | Parse Evaluation Result\").item.json.q5_score }}/20</li>\n</ul>\n\n<p><strong>Evaluation Summary:</strong><br>\n{{ $(\"24 | Parse Evaluation Result\").item.json.phone_screening_result }}</p>\n\n<p><strong>Next Steps:</strong><br>\n{{ $(\"24 | Parse Evaluation Result\").item.json.recommended_stage }}</p>\n\n<p>Our HR team will contact you within 2-3 business days to schedule your next interview.</p>\n\n<p>Best regards,<br><strong>HR Team</strong></p>\n\n<p style=\"color:#999;font-size:12px;\">Reference ID: {{ $(\"24 | Parse Evaluation Result\").item.json.candidate_id }}</p>",
+        "options": {}
+      },
+      "id": "8cd6ece1-ac5c-4295-b8c2-b39733f090ee",
+      "name": "29 | Pass Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -1888,
+        -16
+      ],
+      "webhookId": "490f0510-cf69-4476-8222-cdba8b1aa1cb",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "6dfAY7TLFQ6BmwZn",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE",
+          "mode": "list",
+          "cachedResultName": "Hiring",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "email": "={{ $json.email }}",
+            "stage": "=Rejected After Questionnaire",
+            "updated_at": "={{ $json.updated_at }}"
+          },
+          "matchingColumns": [
+            "email"
+          ],
+          "schema": [
+            {
+              "id": "candidate_id",
+              "displayName": "candidate_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "full_name",
+              "displayName": "full_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "linkedin_url",
+              "displayName": "linkedin_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "portfolio_url",
+              "displayName": "portfolio_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "drive_resume_link",
+              "displayName": "drive_resume_link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "drive_file_id",
+              "displayName": "drive_file_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "stage",
+              "displayName": "stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "strengths",
+              "displayName": "strengths",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weaknesses",
+              "displayName": "weaknesses",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "recommended_stage",
+              "displayName": "recommended_stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ai_parsing_failed",
+              "displayName": "ai_parsing_failed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scored_at",
+              "displayName": "scored_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "workflow_version",
+              "displayName": "workflow_version",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "questionnaire_responses",
+              "displayName": "questionnaire_responses",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "phone_interview_notes",
+              "displayName": "phone_interview_notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "phone_screening_result",
+              "displayName": "phone_screening_result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "recruiter_notes",
+              "displayName": "recruiter_notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "3643531c-a493-4b8b-8d5d-7567b52312ff",
+      "name": "30 | Update ATS Rejected",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -2336,
+        176
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "RIawvczPmPaW8l8i",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0B2QE63JMB",
+          "mode": "list",
+          "cachedResultName": "all-hr-recruit"
+        },
+        "text": "=*Candidate Rejected After Questionnaire* :x:\n\n*Candidate ID:* {{ $(\"24 | Parse Evaluation Result\").item.json.candidate_id }}\n*Name:* {{ $(\"24 | Parse Evaluation Result\").item.json.full_name }}\n*Email:* {{ $(\"24 | Parse Evaluation Result\").item.json.email }}\n*Total Score:* {{ $(\"24 | Parse Evaluation Result\").item.json.questionnaire_score }}/100 (Below passing threshold of 75)\n\n*Question Breakdown:*\n• Q1 (REST vs GraphQL): {{ $(\"24 | Parse Evaluation Result\").item.json.q1_score }}/20\n• Q2 (DB Optimization): {{ $(\"24 | Parse Evaluation Result\").item.json.q2_score }}/20\n• Q3 (Microservices): {{ $(\"24 | Parse Evaluation Result\").item.json.q3_score }}/20\n• Q4 (Debugging): {{ $(\"24 | Parse Evaluation Result\").item.json.q4_score }}/20\n• Q5 (CI/CD): {{ $(\"24 | Parse Evaluation Result\").item.json.q5_score }}/20\n\n*Recommended Stage:* {{ $(\"24 | Parse Evaluation Result\").item.json.recommended_stage }}\n\n*Recruiter Notes:*\n{{ $(\"24 | Parse Evaluation Result\").item.json.recruiter_notes }}",
+        "otherOptions": {}
+      },
+      "id": "653d56bc-5f41-40ff-b067-c03806ae552d",
+      "name": "31 | Slack Reject Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        -2112,
+        176
+      ],
+      "webhookId": "0f5a9c35-cd09-4611-b400-12a0ffea1162",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "SWYmcF8KWRxK0OdN",
+          "name": "Slack OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $(\"24 | Parse Evaluation Result\").item.json.email }}",
+        "subject": "Update Regarding Your Application",
+        "message": "=<p>Hi {{ $(\"24 | Parse Evaluation Result\").item.json.full_name }},</p>\n\n<p>Thank you for completing the technical questionnaire and for your interest in joining our team.</p>\n\n<p>After careful evaluation of your questionnaire responses, we have decided not to proceed further with your application at this time.</p>\n\n<p><strong>Your Score:</strong> {{ $(\"24 | Parse Evaluation Result\").item.json.questionnaire_score }}/100</p>\n\n<p>We appreciate the time and effort you invested in the process. We encourage you to continue developing your skills and apply for future opportunities that match your expertise.</p>\n\n<p>We wish you the best in your job search and career growth.</p>\n\n<p>Best regards,<br><strong>HR Team</strong></p>\n\n<p style=\"color:#999;font-size:12px;\">Reference ID: {{ $(\"24 | Parse Evaluation Result\").item.json.candidate_id }}</p>",
+        "options": {}
+      },
+      "id": "4e31f20f-3414-4fc3-b3c6-410a96b9e64a",
+      "name": "32 | Reject Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -1888,
+        176
+      ],
+      "webhookId": "93a6eae0-1657-4635-8bb1-2769c5b91b90",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "6dfAY7TLFQ6BmwZn",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE",
+          "mode": "list",
+          "cachedResultName": "Hiring",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bQRI05ZORKJ-augYv0OAUfK8QJtO8T0gdlp76lGmPiE/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "email",
+              "lookupValue": "={{ $(\"19 | Questionnaire Form\").item.json.Email }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8ef97f2c-d06a-430a-9aba-164b320760f8",
+      "name": "21 | Lookup Candidate Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -3808,
+        80
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "RIawvczPmPaW8l8i",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "01 | Candidate Application Form": {
+      "main": [
+        [
+          {
+            "node": "02 | Generate Candidate ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "02 | Generate Candidate ID": {
+      "main": [
+        [
+          {
+            "node": "03 | Normalize Binary Name",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "03 | Normalize Binary Name": {
+      "main": [
+        [
+          {
+            "node": "04 | Validate Resume Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "04 | Validate Resume Upload": {
+      "main": [
+        [
+          {
+            "node": "05 | Upload Resume to Drive",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "E4 | Log Missing Resume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "05 | Upload Resume to Drive": {
+      "main": [
+        [
+          {
+            "node": "06 | Merge Candidate and Drive Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "06 | Merge Candidate and Drive Data": {
+      "main": [
+        [
+          {
+            "node": "07 | Create ATS Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "07 | Create ATS Record": {
+      "main": [
+        [
+          {
+            "node": "08 | Download Resume from Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "08 | Download Resume from Drive": {
+      "main": [
+        [
+          {
+            "node": "09 | Normalize Download Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "09 | Normalize Download Binary": {
+      "main": [
+        [
+          {
+            "node": "10 | Extract Resume Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10 | Extract Resume Text": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "12 | Parse AI Response and Merge": {
+      "main": [
+        [
+          {
+            "node": "13 | Score Decision Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "13 | Score Decision Gate": {
+      "main": [
+        [
+          {
+            "node": "14a | Interview Invite Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "14b | Rejection Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "14a | Interview Invite Email": {
+      "main": [
+        [
+          {
+            "node": "15a | Update ATS Shortlisted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "14b | Rejection Email": {
+      "main": [
+        [
+          {
+            "node": "15b | Update ATS Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "15a | Update ATS Shortlisted": {
+      "main": [
+        [
+          {
+            "node": "16a | HR Slack Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "15b | Update ATS Rejected": {
+      "main": [
+        [
+          {
+            "node": "16b | Log Rejection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E2 | Log Error to Sheets": {
+      "main": [
+        [
+          {
+            "node": "E3 | Notify HR of Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "12 | Parse AI Response and Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "16a | HR Slack Alert": {
+      "main": [
+        []
+      ]
+    },
+    "19 | Questionnaire Form": {
+      "main": [
+        [
+          {
+            "node": "21 | Lookup Candidate Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "22 | Build Evaluation Prompt": {
+      "main": [
+        [
+          {
+            "node": "23 | OpenAI Evaluation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "24 | Parse Evaluation Result": {
+      "main": [
+        [
+          {
+            "node": "25 | Update ATS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "25 | Update ATS": {
+      "main": [
+        [
+          {
+            "node": "26 | Questionnaire Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "26 | Questionnaire Decision": {
+      "main": [
+        [
+          {
+            "node": "27 | Update ATS Passed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "30 | Update ATS Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "23 | OpenAI Evaluation": {
+      "main": [
+        [
+          {
+            "node": "24 | Parse Evaluation Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "27 | Update ATS Passed": {
+      "main": [
+        [
+          {
+            "node": "28 | Slack Pass Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "28 | Slack Pass Notification": {
+      "main": [
+        [
+          {
+            "node": "29 | Pass Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "30 | Update ATS Rejected": {
+      "main": [
+        [
+          {
+            "node": "31 | Slack Reject Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "31 | Slack Reject Notification": {
+      "main": [
+        [
+          {
+            "node": "32 | Reject Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "21 | Lookup Candidate Data": {
+      "main": [
+        [
+          {
+            "node": "22 | Build Evaluation Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "be9c1de8-99f9-4577-85c7-ed93d3e4be23",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "0aa4b0cce3d7dc487891db37fc61e98df849bba424bf32bde38859ff7f2d9ece"
+  },
+  "id": "GOTHNAEcoLoLcvj9",
+  "tags": []
+}
