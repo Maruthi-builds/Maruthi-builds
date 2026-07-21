@@ -1,0 +1,320 @@
+{
+  "name": "Personal Email AI Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {}
+      },
+      "id": "5f6c2e38-0ea5-41de-953d-80e5861ec697",
+      "name": "Email Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        112
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ph66aGV0Y4PjGuXR",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "sender",
+              "value": "={{$json[\"from\"] || \"\"}}"
+            },
+            {
+              "name": "subject",
+              "value": "={{$json[\"subject\"] || \"\"}}"
+            },
+            {
+              "name": "body",
+              "value": "={{$json[\"textPlain\"] || \"\"}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "91001a97-c474-422a-b241-d8bc72b14701",
+      "name": "Clean Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -608,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "model": "o4-mini",
+        "prompt": "You are an email analyzer.\n\nAnalyze this email and return JSON:\n{\n\"intent\":\"\",\n\"priority\":\"high/medium/low\",\n\"category\":\"urgent/finance/clients/spam/other\",\n\"action\":\"reply/ignore\",\n\"summary\":\"\",\n\"deadlines\":[],\n\"requires_calendar\":false\n}\n\nEmail:\n{{$json[\"body\"] || \"\"}}",
+        "options": {},
+        "requestOptions": {}
+      },
+      "id": "18de8644-c74e-42c5-8a1b-07b886d76598",
+      "name": "Analyze Email",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        112
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "9Bik4kRMYbge2KxJ",
+          "name": "pnc mail openai key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"action\"] || \"\"}}",
+              "value2": "reply"
+            }
+          ]
+        }
+      },
+      "id": "97bc8589-35ab-425c-86ca-5b546a7af147",
+      "name": "Should Reply?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -208,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "model": "text-embedding-3-small",
+        "prompt": "Write a human-like reply.\n\nRules:\n- No spelling mistakes\n- Natural tone\n- No AI mention\n\nEmail:\n{{$json[\"body\"] || \"\"}}\n\nSummary:\n{{$json[\"summary\"] || \"\"}}",
+        "options": {},
+        "requestOptions": {}
+      },
+      "id": "30313eb7-85c0-4f73-b53f-ddf7b02e3a09",
+      "name": "Generate Reply",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "KpPJctNpvPS25Bkf",
+          "name": "OpenAi account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "text-embedding-3-small",
+        "prompt": "Fix grammar and spelling:\n\n{{$json[\"text\"] || \"\"}}",
+        "options": {},
+        "requestOptions": {}
+      },
+      "id": "fd254d5f-5fa0-4608-96ba-785858960bfe",
+      "name": "Grammar Check",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        208,
+        0
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "KpPJctNpvPS25Bkf",
+          "name": "OpenAi account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "subject": "=={{\"Re: \" + ($json[\"subject\"] || \"No Subject\")}}",
+        "message": "=={{$json[\"text\"] || $json[\"reply\"] || \"Hello, just following up.\"}}",
+        "additionalFields": {
+          "toList": [
+            []
+          ],
+          "ccList": [
+            []
+          ],
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {}
+            ]
+          }
+        }
+      },
+      "id": "7ccb36df-6286-4c59-bdb5-75cb594e3d70",
+      "name": "Send Reply",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 1,
+      "position": [
+        400,
+        0
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ph66aGV0Y4PjGuXR",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json[\"requires_calendar\"] || false}}"
+            }
+          ]
+        }
+      },
+      "id": "13934df4-be6b-44d3-964f-c3ec3f7ecbce",
+      "name": "Needs Calendar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        32,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "en.indian#holiday@group.v.calendar.google.com",
+          "mode": "list",
+          "cachedResultName": "Holidays in India"
+        },
+        "start": "={{$json[\"deadlines\"][0] || \"\"}}",
+        "end": "={{$json[\"deadlines\"][0] || \"\"}}",
+        "additionalFields": {}
+      },
+      "id": "5e79c5d1-de32-4864-8b1d-6d96fa0979ec",
+      "name": "Create Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        384,
+        192
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "MJIHQnMj7Z8nFSXq",
+          "name": "Google Calendar account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Email Trigger": {
+      "main": [
+        [
+          {
+            "node": "Clean Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Email": {
+      "main": [
+        [
+          {
+            "node": "Should Reply?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Reply?": {
+      "main": [
+        [
+          {
+            "node": "Generate Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Generate Reply": {
+      "main": [
+        [
+          {
+            "node": "Grammar Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Grammar Check": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Calendar?": {
+      "main": [
+        [
+          {
+            "node": "Create Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "3d3fd3fd-0d62-42c8-ae3c-bb29b4b33628",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "475aa99012a5d8db18aebefac366cfde0d01594bd5c59ffc8583fd2841954653"
+  },
+  "id": "vEONCREC53fWmXEK",
+  "tags": []
+}
